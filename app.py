@@ -205,3 +205,188 @@ if st.session_state.current_user:
             st.success("Admin Panel will be implemented next. (This is a placeholder.)")
 
 # End of file
+
+import streamlit as st
+
+# Make sure the login page initialized session_state.users earlier
+
+st.set_page_config(page_title="Admin Panel", layout="wide")
+
+# Check authentication
+if "current_user" not in st.session_state or st.session_state.current_user is None:
+    st.error("You must be logged in as admin to access this page.")
+    st.stop()
+
+current_user = st.session_state.current_user
+user = st.session_state.users[current_user]
+
+if user["type"] != "admin":
+    st.error("Access denied. Only admin can enter this page.")
+    st.stop()
+
+st.title("🔐 Admin Panel — Imaging Auction")
+st.write("Manage teams, auction rounds, and monitor bidding activity.")
+
+st.markdown("---")
+
+
+# =================================================================
+# SECTION 1: TEAM MANAGEMENT
+# =================================================================
+st.header("👥 Team Management")
+
+# List all users except admin
+team_users = {u: info for u, info in st.session_state.users.items() if info["type"] == "team"}
+
+if len(team_users) == 0:
+    st.warning("No teams registered yet.")
+else:
+    st.subheader("Registered Teams")
+    for username, info in team_users.items():
+        with st.expander(f"Team: {info['team_name']} (username: {username})"):
+            st.write(f"**Credits:** {info['credits']}")
+            st.write(f"**Pipeline:** {info['pipeline']}")
+            if st.button(f"Delete team '{username}'", key=f"delete_{username}"):
+                del st.session_state.users[username]
+                st.success(f"Team '{username}' deleted.")
+                st.experimental_rerun()
+
+st.markdown("---")
+
+
+# =================================================================
+# SECTION 2: CREATE NEW TEAM
+# =================================================================
+st.header("➕ Create a New Team")
+
+with st.form("admin_create_team_form"):
+    t_user = st.text_input("Choose username").strip().lower()
+    t_pass = st.text_input("Choose password", type="password")
+    t_teamname = st.text_input("Team display name")
+    t_credits = st.number_input("Initial credit amount", min_value=0, max_value=500, value=100)
+    create_team = st.form_submit_button("Create Team")
+
+    if create_team:
+        if not t_user or not t_pass or not t_teamname:
+            st.error("All fields are required.")
+        elif t_user in st.session_state.users:
+            st.error("Username already exists.")
+        else:
+            st.session_state.users[t_user] = {
+                "password": hashlib.sha256(t_pass.encode()).hexdigest(),
+                "type": "team",
+                "team_name": t_teamname,
+                "credits": t_credits,
+                "pipeline": [],
+                "bids": {}
+            }
+            st.success(f"Team '{t_teamname}' created successfully!")
+            st.experimental_rerun()
+
+st.markdown("---")
+
+
+# =================================================================
+# SECTION 3: AUCTION ROUND CONTROL
+# =================================================================
+st.header("🎬 Auction Manager")
+
+# Initialize auction state
+if "auction_round" not in st.session_state:
+    st.session_state.auction_round = 0
+
+if "current_round_modules" not in st.session_state:
+    st.session_state.current_round_modules = []
+
+if "bids" not in st.session_state:
+    st.session_state.bids = {}
+
+st.subheader(f"Current Round: {st.session_state.auction_round}")
+
+# Start new round
+if st.button("Start New Round"):
+    st.session_state.auction_round += 1
+    st.session_state.current_round_modules = []
+    st.session_state.bids = {}
+    st.success(f"Round {st.session_state.auction_round} started!")
+    st.experimental_rerun()
+
+# Select modules for round
+st.subheader("Select Modules for This Round")
+
+available_modules = [
+    "Z-Score Norm", "N4 Bias-Field", "NLM Denoise", "CLAHE",
+    "Rigid + NCC", "Affine + MI", "Deformable B-spline",
+    "GLCM", "LBP", "Otsu", "K-means", "EM (GMM)",
+    "Random Forest", "U-Net", "MRF/CRF"
+]
+
+round_modules = st.multiselect(
+    "Choose modules for this round:",
+    available_modules,
+    default=st.session_state.current_round_modules
+)
+
+if st.button("Confirm Round Modules"):
+    st.session_state.current_round_modules = round_modules
+    st.success("Modules saved for this round.")
+    st.experimental_rerun()
+
+# Show modules
+if st.session_state.current_round_modules:
+    st.info(f"Modules in Round {st.session_state.auction_round}: {st.session_state.current_round_modules}")
+
+st.markdown("---")
+
+
+# =================================================================
+# SECTION 4: BIDS MONITORING & WINNER SELECTION
+# =================================================================
+st.header("📊 Live Bids")
+
+if "bids" not in st.session_state:
+    st.session_state.bids = {}
+
+if len(team_users) == 0:
+    st.warning("No teams to bid yet.")
+else:
+    for team, info in team_users.items():
+        st.write(f"**{info['team_name']} ({team})** → Bid: "
+                 f"{st.session_state.bids.get(team, 'No bid yet')} credits")
+
+# Select winner
+st.subheader("🏆 Declare Winner")
+
+winner_username = st.selectbox("Select winning team:", ["None"] + list(team_users.keys()))
+
+if st.button("Confirm Winner"):
+    if winner_username == "None":
+        st.warning("Select a valid team.")
+    else:
+        st.success(f"Winner: {winner_username}")
+        # Deduct credits and add module later in part C & D
+        st.session_state.bids = {}
+        st.experimental_rerun()
+
+st.markdown("---")
+
+
+# =================================================================
+# SECTION 5: RESET SYSTEM
+# =================================================================
+st.header("🧨 Reset System")
+
+if st.button("Reset Everything"):
+    for u, info in st.session_state.users.items():
+        if info["type"] == "team":
+            info["credits"] = 100
+            info["pipeline"] = []
+            info["bids"] = {}
+
+    st.session_state.auction_round = 0
+    st.session_state.current_round_modules = []
+    st.session_state.bids = {}
+    st.success("System reset successfully!")
+    st.experimental_rerun()
+
+
